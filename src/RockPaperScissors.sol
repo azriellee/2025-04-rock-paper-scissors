@@ -151,6 +151,10 @@ contract RockPaperScissors {
      * @notice Join an existing game with ETH bet
      * @param _gameId ID of the game to join
      */
+    // @audit-info; this function would allow me to join token games by passing in 0 ether
+    // subsequent functions require transferring tokens, so this could possibly be a DoS
+    // if i join without any tokens in my balance
+    // @fix: should ensure that msg.value > 0
     function joinGameWithEth(uint256 _gameId) external payable {
         Game storage game = games[_gameId];
 
@@ -367,6 +371,9 @@ contract RockPaperScissors {
      * @notice Get the contract owner (the deployer)
      * @return The owner address
      */
+     // @audit-info: this function is not very useful and might be confusing as the adminAddress
+     // could not be the owner if the owner sets a different admin
+     // just reference adminAddress directly?
     function owner() public view returns (address) {
         return adminAddress;
     }
@@ -375,6 +382,7 @@ contract RockPaperScissors {
      * @notice Get the owner of the token contract
      * @return The token owner address
      */
+     // @audit-info: not used within the contract, can be set as external
     function tokenOwner() public view returns (address) {
         return winningToken.owner();
     }
@@ -394,6 +402,8 @@ contract RockPaperScissors {
      * @notice Allows the admin to withdraw accumulated protocol fees
      * @param _amount The amount to withdraw (0 for all)
      */
+     // @audit-info: technically this function is susceptible to reentrancy attacks, but it is only able to drain 
+     // "acccumulatedFees" amount from the contract before this function reverts due to underflow
     function withdrawFees(uint256 _amount) external {
         require(msg.sender == adminAddress, "Only admin can withdraw fees");
 
@@ -488,6 +498,7 @@ contract RockPaperScissors {
             emit FeeCollected(_gameId, fee);
 
             // Send prize to winner
+            // @q: vulnerable to reentrancy? but this is an internal function, so will have to check all the functions that call this
             (bool success,) = _winner.call{value: prize}("");
             require(success, "Transfer failed");
         }
@@ -525,6 +536,7 @@ contract RockPaperScissors {
             emit FeeCollected(_gameId, fee);
 
             // Refund both players
+            // @q: vulnerable to reentrancy? but this is an internal function, so will have to check all the functions that call this
             (bool successA,) = game.playerA.call{value: refundPerPlayer}("");
             (bool successB,) = game.playerB.call{value: refundPerPlayer}("");
             require(successA && successB, "Transfer failed");
@@ -550,6 +562,7 @@ contract RockPaperScissors {
         game.state = GameState.Cancelled;
 
         // Refund ETH to players
+        // @q: vulnerable to reentrancy? but this is an internal function, so will have to check all the functions that call this
         if (game.bet > 0) {
             (bool successA,) = game.playerA.call{value: game.bet}("");
             require(successA, "Transfer to player A failed");
