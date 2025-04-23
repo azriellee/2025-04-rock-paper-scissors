@@ -76,20 +76,25 @@
     }
 ```
 
-### [M-1] Funds / Tokens Could be locked up during games with unresponsive opponents, if opponent does not call `RockPaperScissors::commitMove`.
+### [M-1] Funds/Token Lockup Risk Due to Unresponsive Opponent After Move Commit
 
-**Description:** When a player join a game and commits a move, the game.revealDeadline variable is not (default value 0) only until his opponent also commits a move, while the game state has already changed to `Committed`. If the opponent is unresponsive, it could cause the funds / tokens to be locked within the contract without a way to cancel.
+**Description:** When a player joins a game and commits their move, the game state transitions to `Committed`, but the `revealDeadline` remains unset (defaulting to 0) until the opponent also commits their move. If the opponent becomes unresponsive and does not commit, the game remains in the `Committed` state indefinitely with no way to proceed or exit. This results in both players’ funds/tokens being locked in the contract.
 
-The following reasons are why the current mechanisms for handling timeouts / cancelling games cannot handle this situation:
+Why existing timeout/cancel mechanisms don't work:
 
-1. `RockPaperScissors::timeoutReveal` cannot be called as the check `require(block.timestamp > game.revealDeadline, "Reveal phase not timed out yet");` will not pass since `game.revealDeadline` is the 0 value when not set.
-2. `RockPaperScissors::cancelGame` cannot be called as the game is neither in `Created` state nor is the player the game creator in the following checks: `require(game.state == GameState.Created, "Game must be in created state");` and `require(msg.sender == game.playerA, "Only creator can cancel");`
+`RockPaperScissors::timeoutReveal` cannot be triggered because `revealDeadline == 0`, making the requirement `require(block.timestamp > game.revealDeadline)` always fail.
 
-**Impact:** This could cause players to lose their funds / tokens to the contract without a way to rescue them.
+`RockPaperScissors::cancelGame` cannot be used because:
 
-**Proof of Concept:** NA
+The game is no longer in the Created state.
 
-**Recommended Mitigation:** There could be an additional field set within games to update when one of the player has committed a move, and either players could have the option to cancel the game if their opponent has not responded within a certain time limit. The following are examples of how the code could be updated to allow for this:
+Only the creator (`playerA`) is allowed to cancel, and they can’t once the state has moved to `Committed`.
+
+**Impact:** Players may permanently lose access to their funds/tokens if their opponent abandons the game after one move is committed. There is currently no way to recover from this state.
+
+**Proof of Concept:** N/A
+
+**Recommended Mitigation:** Introduce a new field (e.g., commitDeadline) that sets a timeout after the first player commits a move. If the second player fails to commit within this timeframe, the first player should be able to cancel the game and recover their funds. This ensures fairness and prevents griefing through inactivity.
 
 ```diff
     // Game structure
@@ -139,15 +144,21 @@ The following reasons are why the current mechanisms for handling timeouts / can
     }
 ```
 
-### [M-2] Business logic errors in `RockPaperScissors::timeoutReveal` due to Lack of validation that `game.revealDeadline` is set, potentially causing disruptions to games
+### [M-2] Improper Validation in `RockPaperScissors::timeoutReveal` Allows Premature Game Forfeits
 
-**Description:** Currently, `RockPaperScissors::timeoutReveal` is supposed to be used once both players have committed a move, and one or both party has not revealed their move until the deadline, allowing the game to be forfeit or cancelled. However, due to a lack of validation of `game.revealDeadline` within the check `require(block.timestamp > game.revealDeadline, "Reveal phase not timed out yet");`, if the `game.revealDeadline` field is not set (which default value is 0) this check would always pass. This would allow players to immediately call this function once they join a game and commit a move.
+**Description:** he `RockPaperScissors::timeoutReveal` function is intended to handle situations where one or both players fail to reveal their committed moves after the `revealDeadline`. However, there is no check to ensure that `game.revealDeadline` has been properly set before using it in the statement:
 
-**Impact:** An attacker could cause disruptions to current games by joining all the games, committing a move and then immediately calling `RockPaperScissors::timeoutReveal` to get the games cancelled. No funds would be lost in the process, but there could be potential business disruptions to the games.
+```solidity
+require(block.timestamp > game.revealDeadline, "Reveal phase not timed out yet");
+```
 
-**Proof of Concept:** Please refer to H-1, where this exploit was also demonstrated
+If `game.revealDeadline` is still at its default value of 0 (e.g., when only one player has committed a move), this `require` statement will always pass, as `block.timestamp` will always be greater than zero. This allows any player to prematurely invoke `timeoutReveal` immediately after committing a move—before the opponent even has a chance to respond.
 
-**Recommended Mitigation:** Adding an additional check to ensure the `game.revealDeadline` would solve this issue.
+**Impact:** A malicious player could join multiple games, commit a move, and instantly call `timeoutReveal` to disrupt the game flow. While this may not result in financial loss, it can prevent legitimate gameplay, effectively acting as a denial-of-service attack against the contract’s normal operations.
+
+**Proof of Concept:** Please refer to [H-1], where this exploit was also demonstrated
+
+**Recommended Mitigation:** Add a validation check to ensure `game.revealDeadline` has been explicitly set before performing the timeout logic. This prevents the function from being abused before both players have committed their moves and the reveal phase has officially started.
 
 ```diff
     function timeoutReveal(uint256 _gameId) external {
