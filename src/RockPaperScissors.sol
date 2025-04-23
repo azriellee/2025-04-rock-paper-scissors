@@ -151,9 +151,7 @@ contract RockPaperScissors {
      * @notice Join an existing game with ETH bet
      * @param _gameId ID of the game to join
      */
-    // @audit-info; this function would allow me to join token games by passing in 0 ether
-    // subsequent functions require transferring tokens, so this could possibly be a DoS
-    // if i join without any tokens in my balance
+    // @audit-info; this function would allow me to join token games for free by passing in 0 ether
     // @fix: should ensure that msg.value > 0
     function joinGameWithEth(uint256 _gameId) external payable {
         Game storage game = games[_gameId];
@@ -263,6 +261,11 @@ contract RockPaperScissors {
      * @notice Claim win if opponent didn't reveal in time
      * @param _gameId ID of the game
      */
+     // @audit-info: Business logic error i guess? as someone can just call this function immediately after
+     // joining a game. 
+     // @fix: Add an additional check to ensure the revealDeadline was also set. This shouldnt result in any 
+     // funds or tokens being locked as someone can call cancelGame (actually cant because cancelGame requires
+     // the game to be in created phase, if someone committed a move then gg)
     function timeoutReveal(uint256 _gameId) external {
         Game storage game = games[_gameId];
 
@@ -402,8 +405,6 @@ contract RockPaperScissors {
      * @notice Allows the admin to withdraw accumulated protocol fees
      * @param _amount The amount to withdraw (0 for all)
      */
-     // @audit-info: technically this function is susceptible to reentrancy attacks, but it is only able to drain 
-     // "acccumulatedFees" amount from the contract before this function reverts due to underflow
     function withdrawFees(uint256 _amount) external {
         require(msg.sender == adminAddress, "Only admin can withdraw fees");
 

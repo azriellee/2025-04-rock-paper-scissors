@@ -1,3 +1,117 @@
+---
+title: Protocol Audit Report
+author: Azriel
+date: April 23, 2025
+header-includes:
+  - \usepackage{titling}
+  - \usepackage{graphicx}
+---
+
+\begin{titlepage}
+\centering
+\begin{figure}[h]
+\centering
+\end{figure}
+\vspace*{2cm}
+{\Huge\bfseries Protocol Audit Report\par}
+\vspace{1cm}
+{\Large Version 1.0\par}
+\vspace{2cm}
+{\Large\itshape Cyfrin.io\par}
+\vfill
+{\large \today\par}
+\end{titlepage}
+
+\maketitle
+
+<!-- Your report starts here! -->
+
+Prepared by: Azriel
+
+# Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [Protocol Summary](#protocol-summary)
+- [Disclaimer](#disclaimer)
+- [Risk Classification](#risk-classification)
+- [Audit Details](#audit-details)
+  - [Scope](#scope)
+  - [Compatibilities:](#compatibilities)
+  - [Roles](#roles)
+- [Executive Summary](#executive-summary)
+  - [Issues found](#issues-found)
+- [Findings](#findings)
+    - [\[H-1\]`RockPaperScissors::joinGameWithEth` Allows Users to Join Token Games Without Paying](#h-1rockpaperscissorsjoingamewitheth-allows-users-to-join-token-games-without-paying)
+    - [\[M-1\] Funds / Tokens Could be locked up during games with unresponsive opponents, if opponent does not call `RockPaperScissors::commitMove`.](#m-1-funds--tokens-could-be-locked-up-during-games-with-unresponsive-opponents-if-opponent-does-not-call-rockpaperscissorscommitmove)
+    - [\[M-2\] Business logic errors in `RockPaperScissors::timeoutReveal` due to Lack of validation that `game.revealDeadline` is set, potentially causing disruptions to games](#m-2-business-logic-errors-in-rockpaperscissorstimeoutreveal-due-to-lack-of-validation-that-gamerevealdeadline-is-set-potentially-causing-disruptions-to-games)
+    - [\[I-1\]: Unsafe ERC20 Operations should not be used](#i-1-unsafe-erc20-operations-should-not-be-used)
+    - [\[I-2\]: Solidity pragma should be specific, not wide](#i-2-solidity-pragma-should-be-specific-not-wide)
+    - [\[G-1\]: `public` functions not used internally could be marked `external`](#g-1-public-functions-not-used-internally-could-be-marked-external)
+    - [\[G-2\]: Define and use `constant` variables instead of using literals](#g-2-define-and-use-constant-variables-instead-of-using-literals)
+    - [\[G3\]: Event is missing `indexed` fields](#g3-event-is-missing-indexed-fields)
+
+# Protocol Summary
+
+Simulates Rock Paper Scissors game on Web3 and ensures fairness that players are not able to view their opponent's moves ahead of time.
+
+# Disclaimer
+
+The Azriel(me) team makes all effort to find as many vulnerabilities in the code in the given time period, but holds no responsibilities for the findings provided in this document. A security audit by the team is not an endorsement of the underlying business or product. The audit was time-boxed and the review of the code was solely on the security aspects of the Solidity implementation of the contracts.
+
+# Risk Classification
+
+|            |        | Impact |        |     |
+| ---------- | ------ | ------ | ------ | --- |
+|            |        | High   | Medium | Low |
+|            | High   | H      | H/M    | M   |
+| Likelihood | Medium | H/M    | M      | M/L |
+|            | Low    | M      | M/L    | L   |
+
+We use the [CodeHawks](https://docs.codehawks.com/hawks-auditors/how-to-evaluate-a-finding-severity) severity matrix to determine severity. See the documentation for more details.
+
+# Audit Details
+
+## Scope
+
+In Scope:
+
+```
+src/
+--RockPaperScissors.sol - Main game contract
+--WinningToken.sol - ERC20 token awarded to winners
+```
+
+## Compatibilities:
+
+Blockchains:
+Ethereum Mainnet
+All EVM-compatible chains  
+
+Tokens:
+ETH (for betting)
+RPSW (Rock Paper Scissors Winner Token) - internal ERC20 token  
+
+## Roles
+
+Players: Users who create or join games, commit and reveal moves, and participate in matches  
+Admin: The protocol administrator who can update timeout parameters and withdraw accumulated fees  
+Contract Owner: Initially the deployer of the contract, capable of setting a new admin  
+
+# Executive Summary
+
+For this audit, I used about 6h in total spread across 2 days to conduct the audit and complete the report. I made use of tools like Slither and Aderyn to first conduct static analysis, in addition to manual analysis. Additionally, I used cloc and Solidity Metrics to aid me in the initial scoping phase and understanding of the code base better, although there are only 2 files in scope.
+
+## Issues found
+
+| Severity | Number of Issues Found |
+| -------- | ---------------------- |
+| High     | 1                      |
+| Medium   | 2                      |
+| Low      | 0                      |
+| Info     | 5                      |
+
+# Findings
+
 ### [H-1]`RockPaperScissors::joinGameWithEth` Allows Users to Join Token Games Without Paying
 
 **Description:** The `RockPaperScissors::joinGameWithEth` function fails to validate that msg.value > 0. As a result, an attacker can call this function with msg.value == 0 and still successfully join a Token-based Game, provided the original creator also set the bet to 0. The check require(msg.value == game.bet) passes because both values are 0.
@@ -346,3 +460,4 @@ Index event fields make the field more quickly accessible to off-chain tools tha
   ```solidity
       event FeeWithdrawn(address indexed admin, uint256 amount);
   ```
+
